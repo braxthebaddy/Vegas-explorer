@@ -1,0 +1,129 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Vegas Trophy Explorer Deluxe</title>
+<style>
+body{margin:0;background:#111;color:white;font-family:Arial}
+#top{padding:10px;background:#222}
+canvas{display:block}
+input,button{margin:4px}
+</style>
+</head>
+<body>
+<div id="top">
+House: <input id="house" value="Luxury Mansion">
+Car: <input id="car" value="Supercar">
+<button onclick="startGame()">Start Game</button>
+<span id="stats"></span>
+</div>
+<canvas id="game" width="1200" height="700"></canvas>
+
+<script>
+const canvas=document.getElementById('game');
+const ctx=canvas.getContext('2d');
+
+let gameStarted=false;
+let house="";
+let carName="";
+let money=0;
+let trophies=0;
+let speed=5;
+
+const player={x:100,y:100};
+const keys={};
+
+const buildings=[];
+for(let i=0;i<15;i++){
+ buildings.push({x:200+Math.random()*850,y:50+Math.random()*550,w:80,h:80,found:false});
+}
+
+const missions=[
+"Find 5 trophies",
+"Earn $500",
+"Explore all buildings"
+];
+
+function startGame(){
+ house=document.getElementById("house").value;
+ carName=document.getElementById("car").value;
+ gameStarted=true;
+ updateStats();
+}
+
+function updateStats(){
+ document.getElementById("stats").textContent=
+ `House:${house} | Car:${carName} | Money:$${money} | Trophies:${trophies}/${buildings.length} | Speed:${speed}`;
+}
+
+document.addEventListener("keydown",e=>keys[e.key]=true);
+document.addEventListener("keyup",e=>keys[e.key]=false);
+
+function update(){
+ if(!gameStarted) return;
+
+ if(keys["ArrowUp"]) player.y-=speed;
+ if(keys["ArrowDown"]) player.y+=speed;
+ if(keys["ArrowLeft"]) player.x-=speed;
+ if(keys["ArrowRight"]) player.x+=speed;
+
+ buildings.forEach(b=>{
+  if(!b.found &&
+     player.x>b.x && player.x<b.x+b.w &&
+     player.y>b.y && player.y<b.y+b.h){
+      b.found=true;
+      trophies++;
+      money+=100;
+      if(trophies%5===0) speed++;
+      updateStats();
+  }
+ });
+}
+
+function draw(){
+ ctx.fillStyle="#1a1a1a";
+ ctx.fillRect(0,0,canvas.width,canvas.height);
+
+ ctx.fillStyle="#333";
+ ctx.fillRect(20,520,220,140);
+ ctx.fillStyle="white";
+ ctx.fillText(house||"House",50,590);
+
+ buildings.forEach(b=>{
+   ctx.fillStyle=b.found?"#555":"#777";
+   ctx.fillRect(b.x,b.y,b.w,b.h);
+   ctx.fillStyle="white";
+   ctx.fillText("Abandoned",b.x+8,b.y+42);
+
+   if(!b.found){
+     ctx.fillStyle="gold";
+     ctx.beginPath();
+     ctx.arc(b.x+40,b.y+18,8,0,Math.PI*2);
+     ctx.fill();
+   }
+ });
+
+ ctx.fillStyle="red";
+ ctx.fillRect(player.x,player.y,40,20);
+ ctx.fillStyle="white";
+ ctx.fillText(carName||"Car",player.x-5,player.y-10);
+
+ ctx.fillText("Missions:",980,40);
+ missions.forEach((m,i)=>ctx.fillText("- "+m,980,70+i*25));
+
+ if(trophies===buildings.length){
+   ctx.font="28px Arial";
+   ctx.fillText("ALL BUILDINGS EXPLORED! YOU WIN!",350,40);
+ }
+}
+
+function loop(){
+ update();
+ draw();
+ requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
