@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Street Legends — First Person Drive</title>
+<style>
+  *{box-sizing:border-box} html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#090d16;color:#fff;font-family:Arial,Helvetica,sans-serif}
+  canvas{display:block;width:100vw;height:100vh}
+  #help{position:fixed;left:14px;top:14px;padding:12px 14px;background:#05070bd9;border:1px solid #ffffff55;border-radius:8px;line-height:1.5;font-size:14px;max-width:270px;pointer-events:none;text-shadow:0 1px 2px #000}
+  #title{font-weight:900;letter-spacing:1.5px;color:#70e7ff;margin-bottom:4px}
+  #start{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#03050ab9}
+  #panel{width:min(440px,90vw);padding:28px;background:#0c1422;border:1px solid #61dfff88;border-radius:18px;box-shadow:0 0 45px #00c8ff22;text-align:center}
+  #panel h1{margin:0 0 8px;font-size:32px;letter-spacing:2px}
+  #panel p{color:#c4d0df;line-height:1.5}
+  button{border:0;border-radius:9px;background:#12c9ef;color:#061018;font-size:16px;font-weight:900;padding:13px 24px;cursor:pointer}
+  button:hover{background:#75eaff}
+  #notice{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#05070bd9;padding:8px 13px;border-radius:7px;color:#d7e4f2;font-size:13px;pointer-events:none}
+  #mobileToggle{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:8;background:#071321ed;color:#80eeff;border:1px solid #52dfffa8;border-radius:10px;padding:11px 16px;font-size:13px;letter-spacing:.5px;box-shadow:0 5px 22px #0008}
+  #mobilePanel{position:fixed;z-index:7;top:0;left:0;right:0;height:190px;padding:64px 18px 18px;background:linear-gradient(#071321f5,#071321dc);border-bottom:1px solid #5de5ff88;display:flex;align-items:center;justify-content:space-between;gap:18px;transform:translateY(-105%);transition:transform .42s cubic-bezier(.2,.8,.2,1);pointer-events:none}
+  #mobilePanel.open{transform:translateY(0);pointer-events:auto}
+  .pad{display:grid;grid-template-columns:repeat(3,48px);grid-template-rows:repeat(2,42px);gap:5px}
+  .mobileKey{background:#14283be8;color:#fff;border:1px solid #72eaff9c;border-radius:10px;padding:0;font-size:20px;touch-action:none;user-select:none;-webkit-user-select:none;box-shadow:inset 0 0 12px #4adfff12}
+  .mobileKey:active,.mobileKey.pressed{background:#13badb;color:#04131b;transform:scale(.96)}
+  .driveKeys{display:flex;gap:9px}
+  .driveKeys .mobileKey{width:58px;height:76px;font-size:13px;font-weight:bold}
+  @media(max-width:600px){#help{font-size:11px;max-width:185px;padding:8px;top:64px}#mobilePanel{height:174px;padding:60px 10px 12px;gap:8px}.pad{grid-template-columns:repeat(3,39px);grid-template-rows:repeat(2,37px);gap:4px}.driveKeys .mobileKey{width:49px;height:67px;font-size:11px}#notice{font-size:11px;bottom:8px;white-space:nowrap}}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="help"><div id="title">STREET LEGENDS</div><b>W / ↑</b> accelerate<br><b>S / ↓</b> brake / reverse<br><b>A D / ← →</b> steer<br><b>Mouse</b> look around<br><b>Space</b> handbrake<br><b>R</b> reset car<br><br><span style="color:#70e7ff">Drive through the city and check out the custom car wraps.</span></div>
+<button id="mobileToggle" type="button">MOBILE CONTROLS</button>
+<div id="mobilePanel" aria-hidden="true">
+  <div class="pad" aria-label="Steering D-pad">
+    <span></span><button class="mobileKey" data-key="w" aria-label="Accelerate">▲</button><span></span>
+    <button class="mobileKey" data-key="a" aria-label="Steer left">◀</button><button class="mobileKey" data-key="s" aria-label="Brake">▼</button><button class="mobileKey" data-key="d" aria-label="Steer right">▶</button>
+  </div>
+  <div class="driveKeys">
+    <button class="mobileKey" data-key=" " aria-label="Handbrake">HANDBRAKE</button>
+    <button class="mobileKey" data-key="r" aria-label="Reset car">RESET</button>
+  </div>
+</div>
+<div id="notice">Tip: steer into the road to avoid traffic. This is a mini browser game.</div>
+<div id="start"><div id="panel"><h1>STREET LEGENDS</h1><p>A first-person city driving mini-game with custom car textures, neon paint, decals, and traffic.</p><p>WASD to drive • Mouse to look • Space for handbrake</p><button id="play">START DRIVING</button></div></div>
+<script>
+(() => {
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
+let W=innerWidth,H=innerHeight,dpr=1;
+function resize(){dpr=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;canvas.width=W*dpr;canvas.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0)}
+addEventListener('resize',resize);resize();
+const keys={};
+addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key))e.preventDefault();if(e.key.toLowerCase()==='r')reset()});
+addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+// Sliding mobile-controls tray. Buttons hold their control while pressed.
+const mobileToggle=document.getElementById('mobileToggle');
+const mobilePanel=document.getElementById('mobilePanel');
+mobileToggle.addEventListener('click',()=>{
+  const open=mobilePanel.classList.toggle('open');
+  mobilePanel.setAttribute('aria-hidden',String(!open));
+  mobileToggle.textContent=open?'CLOSE MOBILE CONTROLS':'MOBILE CONTROLS';
+});
+document.querySelectorAll('.mobileKey[data-key]').forEach(btn=>{
+  const key=btn.dataset.key;
+  const down=e=>{e.preventDefault();keys[key]=true;btn.classList.add('pressed');if(key==='r')reset()};
+  const up=e=>{e.preventDefault();keys[key]=false;btn.classList.remove('pressed')};
+  btn.addEventListener('pointerdown',down);
+  ['pointerup','pointercancel','pointerleave'].forEach(ev=>btn.addEventListener(ev,up));
+});
+let mouseX=0;canvas.addEventListener('mousemove',e=>{if(document.pointerLockElement===canvas)mouseX+=e.movementX});
+let started=false;document.getElementById('play').onclick=()=>{started=true;document.getElementById('start').style.display='none';canvas.requestPointerLock?.()};
+document.addEventListener('pointerlockchange',()=>{});
+let speed=0,steer=0,playerX=0,roadDistance=0,look=0,score=0,damage=0;
+function reset(){speed=0;steer=0;playerX=0;roadDistance=0;look=0;damage=0}
+const traffic=[];
+for(let i=0;i<10;i++)traffic.push({z:Math.random()*1.2+.12,lane:(Math.random()*1.5-0.75),color:['#e9445b','#f2f0e8','#23b8e9','#e4a62b','#a55af2'][i%5],wrap:i%3,seed:i*9.2});
+function rounded(x,y,w,h,r,fill,stroke){ctx.beginPath();ctx.roundRect(x,y,w,h,r);if(fill){ctx.fillStyle=fill;ctx.fill()}if(stroke){ctx.strokeStyle=stroke;ctx.stroke()}}
+function polygon(points,fill){ctx.beginPath();ctx.moveTo(points[0][0],points[0][1]);for(let i=1;i<points.length;i++)ctx.lineTo(points[i][0],points[i][1]);ctx.closePath();ctx.fillStyle=fill;ctx.fill()}
+function line(x1,y1,x2,y2,color,width=1){ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.strokeStyle=color;ctx.lineWidth=width;ctx.stroke()}
+function drawSky(){let g=ctx.createLinearGradient(0,0,0,H*.58);g.addColorStop(0,'#302a62');g.addColorStop(.45,'#f07d79');g.addColorStop(1,'#ffc27f');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+let sunX=W*.72-look*2;let sunY=H*.25;let sg=ctx.createRadialGradient(sunX,sunY,4,sunX,sunY,100);sg.addColorStop(0,'#fff5cc');sg.addColorStop(1,'#ffb16a00');ctx.fillStyle=sg;ctx.fillRect(sunX-100,sunY-100,200,200);
+for(let i=0;i<30;i++){let x=((i*173+look*5)% (W+100))-50,y=H*.32+(i%5)*H*.027,bh=H*(.09+(i*13%15)/100),bw=18+(i*17%45);ctx.fillStyle=['#20253c','#33304b','#292c43'][i%3];ctx.fillRect(x,y-bh,bw,bh);ctx.fillStyle='#ffcb8a88';for(let wy=y-bh+8;wy<y-4;wy+=12)for(let wx=x+5;wx<x+bw-3;wx+=10)if((Math.floor(wx+wy+i)%3)!==0)ctx.fillRect(wx,wy,3,5)}
+// palms
+for(let i=0;i<8;i++){let x=((i*241+W*.06+look*2)%(W+60))-30,y=H*.49;line(x,y,x+Math.sin(i)*5,y-H*.14,'#3b2d35',5);for(let j=0;j<6;j++)line(x,y-H*.14,x+(j-2.5)*17,y-H*.14-14+Math.abs(j-2.5)*4,'#243b3d',4)}
+}
+function road(){let horizon=H*.46+look*.15;polygon([[W*.39,horizon],[W*.61,horizon],[W*1.18,H],[W*-.18,H]],'#343a43');polygon([[W*.37,horizon],[W*.39,horizon],[W*.08,H],[0,H]],'#c8bba0');polygon([[W*.61,horizon],[W*.63,horizon],[W,H],[W*.92,H]],'#c8bba0');
+polygon([[W*.395,horizon],[W*.402,horizon],[W*.12,H],[W*.1,H]],'#f8e7a2');polygon([[W*.598,horizon],[W*.605,horizon],[W*.9,H],[W*.88,H]],'#f8e7a2');
+for(let i=0;i<16;i++){let t=((i/16+roadDistance*.018)%1);let y=horizon+(H-horizon)*t*t;let half= (W*.012)+(W*.22)*t;let dashH=3+32*t;let dashW=1+4*t;for(let lane=-1;lane<=1;lane+=2){let x=W/2+lane*half*.34;ctx.fillStyle='#f3f0d6';ctx.fillRect(x-dashW/2,y,dashW,dashH)}}
+}
+function drawCar(x,y,w,h,color,wrap,seed,hero=false){
+ // shadow and wheels
+ ctx.fillStyle='#090b10aa';ctx.beginPath();ctx.ellipse(x,y+h*.92,w*.58,h*.15,0,0,Math.PI*2);ctx.fill();
+ rounded(x-w*.48,y+h*.42,w*.18,h*.43,5,'#101219');rounded(x+w*.30,y+h*.42,w*.18,h*.43,5,'#101219');
+ // body silhouette
+ polygon([[x-w*.5,y+h*.72],[x-w*.46,y+h*.4],[x-w*.28,y+h*.22],[x-w*.16,y+h*.05],[x+w*.17,y+h*.05],[x+w*.32,y+h*.24],[x+w*.46,y+h*.4],[x+w*.5,y+h*.72],[x+w*.38,y+h*.87],[x-w*.38,y+h*.87]],color);
+ // hood / body highlights
+ polygon([[x-w*.42,y+h*.43],[x-w*.25,y+h*.27],[x+w*.25,y+h*.27],[x+w*.42,y+h*.43],[x+w*.36,y+h*.72],[x-w*.36,y+h*.72]],shade(color,.78));
+ // windshield
+ polygon([[x-w*.25,y+h*.28],[x-w*.14,y+h*.11],[x+w*.14,y+h*.11],[x+w*.26,y+h*.28]],'#182d43');
+ line(x,y+h*.12,x,y+h*.28,'#8bdcff88',Math.max(1,w*.015));
+ // headlights / tail lights
+ rounded(x-w*.4,y+h*.65,w*.16,h*.08,3,hero?'#fff0b5':'#ff536b');rounded(x+w*.24,y+h*.65,w*.16,h*.08,3,hero?'#fff0b5':'#ff536b');
+ // CUSTOM CAR TEXTURES: layered vinyl stripes, flames, geometric decals, door label
+ if(w>20){
+  ctx.save();ctx.beginPath();ctx.moveTo(x-w*.4,y+h*.43);ctx.lineTo(x-w*.3,y+h*.3);ctx.lineTo(x+w*.3,y+h*.3);ctx.lineTo(x+w*.4,y+h*.43);ctx.lineTo(x+w*.34,y+h*.7);ctx.lineTo(x-w*.34,y+h*.7);ctx.closePath();ctx.clip();
+  if(wrap===0){let gg=ctx.createLinearGradient(x-w*.4,y,x+w*.4,y+h);gg.addColorStop(0,'#00eaff');gg.addColorStop(.5,'#2554ff');gg.addColorStop(1,'#ff2fba');ctx.fillStyle=gg;ctx.fillRect(x-w*.5,y+h*.28,w,h*.5);for(let k=-2;k<3;k++)polygon([[x+k*w*.13,y+h*.3],[x+(k+.08)*w*.13,y+h*.48],[x+(k+.2)*w*.13,y+h*.42],[x+(k+.1)*w*.13,y+h*.65],[x+(k+.32)*w*.13,y+h*.46],[x+(k+.22)*w*.13,y+h*.28]],'#071324')}
+  else if(wrap===1){ctx.fillStyle='#ffe45b';ctx.fillRect(x-w*.5,y+h*.3,w,h*.4);for(let k=0;k<7;k++)line(x-w*.5+k*w*.18,y+h*.3,x-w*.2+k*w*.18,y+h*.7,'#e64c25',Math.max(1,w*.018))}
+  else {ctx.fillStyle='#4b126e';ctx.fillRect(x-w*.5,y+h*.3,w,h*.4);for(let k=0;k<5;k++){ctx.beginPath();ctx.arc(x-w*.3+k*w*.15,y+h*.48,w*.035,0,Math.PI*2);ctx.fillStyle=['#ff43da','#00eaff','#ffcb49'][k%3];ctx.fill()}line(x-w*.4,y+h*.36,x+w*.4,y+h*.36,'#fff',Math.max(1,w*.02))}
+  ctx.restore();
+  // windshield shine and custom decal text
+  ctx.fillStyle='#fff';ctx.globalAlpha=.9;ctx.font=`bold ${Math.max(5,w*.075)}px Arial`;ctx.textAlign='center';ctx.fillText(wrap===0?'TURBO X':wrap===1?'STREET KING':'NIGHT RUN',x,y+h*.56);ctx.globalAlpha=1;
+  line(x-w*.3,y+h*.76,x+w*.3,y+h*.76,'#ffffffaa',Math.max(1,w*.012));
+ }
+ if(hero){ // visible dashboard / steering wheel
+ }
+}
+function shade(hex,f){let c=hex.replace('#','');let n=parseInt(c,16);let r=Math.max(0,Math.min(255,((n>>16)&255)*f)),g=Math.max(0,Math.min(255,((n>>8)&255)*f)),b=Math.max(0,Math.min(255,(n&255)*f));return `rgb(${r|0},${g|0},${b|0})`}
+function drawTraffic(){let horizon=H*.46+look*.15;traffic.sort((a,b)=>a.z-b.z);for(const c of traffic){let t=1-c.z;if(t<0||t>1)continue;let y=horizon+(H-horizon)*t*t;let scale=.06+t*.78;let roadHalf=W*(.015+.22*t);let x=W/2+c.lane*roadHalf*1.05-playerX*W*.14*t;drawCar(x,y,Math.max(12,72*scale),Math.max(20,105*scale),c.color,c.wrap,c.seed);}}
+function drawCockpit(){let y=H*.82;
+ // dashboard
+ polygon([[0,H*.82],[W*.18,H*.72],[W*.82,H*.72],[W,H*.82],[W,H],[0,H]],'#111820');
+ polygon([[0,H*.86],[W*.25,H*.76],[W*.75,H*.76],[W,H*.86],[W,H],[0,H]],'#20252b');
+ // instrument panel
+ rounded(W*.37,H*.78,W*.26,H*.13,12,'#070b11','#414c56');
+ for(let i=0;i<2;i++){let x=W*(.44+i*.12),cy=H*.845,r=Math.min(W,H)*.045;ctx.beginPath();ctx.arc(x,cy,r,0,Math.PI*2);ctx.fillStyle='#0d1726';ctx.fill();ctx.strokeStyle='#667a91';ctx.lineWidth=2;ctx.stroke();for(let j=0;j<7;j++){let a=Math.PI*1.1+j*Math.PI*.8/6;line(x+Math.cos(a)*r*.72,cy+Math.sin(a)*r*.72,x+Math.cos(a)*r*.88,cy+Math.sin(a)*r*.88,'#d7e8ff',1)}line(x,cy,x+Math.cos(3.7+speed*.012)*r*.65,cy+Math.sin(3.7+speed*.012)*r*.65,'#ff4e65',2)}
+ // steering wheel
+ ctx.beginPath();ctx.ellipse(W*.5,H*.91,W*.18,H*.14,0,0,Math.PI*2);ctx.strokeStyle='#05070a';ctx.lineWidth=Math.max(12,W*.014);ctx.stroke();ctx.beginPath();ctx.ellipse(W*.5,H*.91,W*.18,H*.14,0,0,Math.PI*2);ctx.strokeStyle='#343a42';ctx.lineWidth=4;ctx.stroke();polygon([[W*.49,H*.89],[W*.35,H*.83],[W*.39,H*.92],[W*.49,H*.93]],'#141a20');polygon([[W*.51,H*.89],[W*.65,H*.83],[W*.61,H*.92],[W*.51,H*.93]],'#141a20');rounded(W*.46,H*.88,W*.08,H*.08,10,'#0a0d12','#424a53');
+}
+function hud(){rounded(W-170,18,150,84,9,'#030711c9','#ffffff55');ctx.fillStyle='#fff';ctx.textAlign='right';ctx.font='bold 20px Arial';ctx.fillText('CITY DRIVE',W-31,44);ctx.font='bold 32px Arial';ctx.fillStyle='#66e7ff';ctx.fillText(Math.abs(Math.round(speed*1.35))+' MPH',W-30,79);
+ctx.textAlign='left';ctx.font='bold 14px Arial';ctx.fillStyle='#fff';ctx.fillText('CASH  $'+(2450+Math.floor(score*4)),W-158,122);
+for(let i=0;i<5;i++){ctx.fillStyle=i<Math.min(5,Math.floor(damage))?'#ffcc40':'#ffffff35';ctx.font='24px Arial';ctx.fillText('★',W-160+i*27,151)}
+// minimap
+let mx=85,my=H-83;ctx.beginPath();ctx.arc(mx,my,54,0,Math.PI*2);ctx.fillStyle='#08121ddd';ctx.fill();ctx.save();ctx.beginPath();ctx.arc(mx,my,51,0,Math.PI*2);ctx.clip();for(let i=-2;i<=2;i++){line(mx+i*23,my-60,mx+i*23,my+60,'#9fb4bf',4);line(mx-60,my+i*23,mx+60,my+i*23,'#9fb4bf',4)}ctx.fillStyle='#43e5ff';polygon([[mx,my-11],[mx-7,my+7],[mx,my+3],[mx+7,my+7]],'#43e5ff');ctx.restore();ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(mx,my,54,0,Math.PI*2);ctx.stroke();
+}
+function update(dt){if(!started)return;let accel=(keys.w||keys.arrowup)?1:0,brake=(keys.s||keys.arrowdown)?1:0;speed+=accel*dt*25-brake*dt*35;speed*=Math.pow(keys[' ']?.88:.992,dt*60);speed=Math.max(-18,Math.min(120,speed));let steerInput=(keys.a||keys.arrowleft?-1:0)+(keys.d||keys.arrowright?1:0);steer+= (steerInput-steer)*Math.min(1,dt*5);playerX+=steer*dt*(.25+Math.abs(speed)*.012);playerX=Math.max(-1.4,Math.min(1.4,playerX));roadDistance+=Math.abs(speed)*dt*.02;score+=Math.max(0,speed)*dt*.015;look+=mouseX*.12;mouseX=0;look*=.99;
+for(const c of traffic){c.z-=Math.max(0,speed)*dt*.0009;if(c.z<.03){c.z=1.2+Math.random()*.6;c.lane=Math.random()*1.6-.8;c.color=['#e9445b','#f2f0e8','#23b8e9','#e4a62b','#a55af2'][Math.floor(Math.random()*5)];c.wrap=Math.floor(Math.random()*3)}}
+if(Math.abs(playerX)>1.05&&Math.abs(speed)>30)damage=Math.min(5,damage+dt*.2);
+}
+let last=performance.now();function frame(now){let dt=Math.min(.04,(now-last)/1000);last=now;update(dt);ctx.clearRect(0,0,W,H);drawSky();road();drawTraffic();drawCockpit();hud();if(!started){ctx.fillStyle='#fff';ctx.textAlign='center';ctx.font='bold 20px Arial';ctx.fillText('READY TO DRIVE?',W/2,H*.65)}requestAnimationFrame(frame)}requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
